@@ -1,12 +1,8 @@
 require("express-async-errors");
 
 const express = require("express");
-const ytdl = require('ytdl-core');
-const ffmpegPath = require("ffmpeg-static");
+const ytdl = require("ytdl-core");
 const cp = require("child_process");
-const stream = require('stream');
-
-const fs = require("fs");
 
 const server = express();
 
@@ -23,6 +19,7 @@ server.use((req, res, next) => {
 
 server.get("/info", async (req, res) => {
 	let videoInfo = await ytdl.getInfo(req.query.url);
+	console.log(videoInfo.formats);
 	res.json({
 		title: videoInfo.videoDetails.title,
 		formats: videoInfo.formats.filter(
@@ -33,8 +30,9 @@ server.get("/info", async (req, res) => {
 	});
 });
 
-server.get("/video/*", (req, res) => {
-	let { url, audio, video, disallowHD } = req.query;
+server.get("/video/*.mp4", (req, res) => {
+	let { url, audio = "highestaudio", video = "highestvideo", disallowHD } = req.query;
+
 	let audioStream = ytdl(url, {
 		quality: audio, 
 		filter: disallowHD && (f => f.audioBitrate <= 128)
@@ -44,32 +42,29 @@ server.get("/video/*", (req, res) => {
 		filter: disallowHD && (f => f.qualityLabel != "1080p")
 	});
 
-	// https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
-	let ffmpegProcess = cp.spawn(ffmpegPath, [
-		// supress non-crucial messages
-		'-loglevel', '8', '-hide_banner',
-		// input audio and video by pipe
-		'-i', 'pipe:3', '-i', 'pipe:4',
-		// map audio and video correspondingly
-		'-map', '0:a', '-map', '1:v',
-		// no need to change the codec
-		'-c:v', 'copy', '-c:a', 'libmp3lame',
-		// output mkv and pipe (HOW THE FUCK DO I MAKE IT USE MP4!!?!?!)
-		'-f', 'matroska', 'pipe:5'
+	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
+	let ffmpegProcess = cp.spawn(`${__dirname}/ffmpeg.exe`, [
+		"-i", "pipe:3", "-i", "pipe:4",
+		"-map", "0:a", "-map", "1:v",
+		"-c", "copy",
+		"-movflags", "+frag_keyframe",
+		"-f", "mp4", "pipe:5"
 	], {
-		// no popup window for Windows users
 		windowsHide: true,
 		stdio: [
-			// silence stdin/out, forward stderr,
-			'inherit', 'inherit', 'inherit',
-			// and pipe audio, video, output
-			'pipe', 'pipe', 'pipe'
+			"inherit", "inherit", "inherit",
+			"pipe", "pipe", "pipe"
 		]
 	});
 	audioStream.pipe(ffmpegProcess.stdio[3]);
 	videoStream.pipe(ffmpegProcess.stdio[4]);
 
 	ffmpegProcess.stdio[5].pipe(res);
+});
+
+server.get("/video/*.mp3", (req, res) => {
+	let { url, audio = "highestaudio" } = req.query;
+	ytdl(url, { quality: audio }).pipe(res);
 });
 
 server.use((err, req, res, next) => {
