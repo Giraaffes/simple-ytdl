@@ -19,7 +19,6 @@ server.use((req, res, next) => {
 
 server.get("/info", async (req, res) => {
 	let videoInfo = await ytdl.getInfo(req.query.url);
-	console.log(videoInfo.formats);
 	res.json({
 		title: videoInfo.videoDetails.title,
 		formats: videoInfo.formats.filter(
@@ -30,17 +29,24 @@ server.get("/info", async (req, res) => {
 	});
 });
 
-server.get("/video/*.mp4", (req, res) => {
+server.get(["/video", "/audio"], async (req, res, next) => {
+	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
+	let ext = (req.path == "/video" ? "mp4" : "mp3");
+	res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.${ext}"`);
+	next();
+})
+
+server.get("/video", (req, res, next) => {
 	let { url, audio = "highestaudio", video = "highestvideo", disallowHD } = req.query;
 
 	let audioStream = ytdl(url, {
 		quality: audio, 
 		filter: disallowHD && (f => f.audioBitrate <= 128)
-	});
+	}).on("error", next);
 	let videoStream = ytdl(url, {
 		quality: video, 
 		filter: disallowHD && (f => f.qualityLabel != "1080p")
-	});
+	}).on("error", next);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
 	let ffmpegProcess = cp.spawn(`${__dirname}/ffmpeg.exe`, [
@@ -62,12 +68,13 @@ server.get("/video/*.mp4", (req, res) => {
 	ffmpegProcess.stdio[5].pipe(res);
 });
 
-server.get("/video/*.mp3", (req, res) => {
+server.get("/audio", (req, res, next) => {
 	let { url, audio = "highestaudio" } = req.query;
-	ytdl(url, { quality: audio }).pipe(res);
+	ytdl(url, {quality: audio}).on("error", next).pipe(res);
 });
 
 server.use((err, req, res, next) => {
+	res.removeHeader("Content-Disposition");
 	let timeStr = (new Date()).toLocaleString({timeZone: "Europe/Copenhagen"});
   console.error(timeStr, req.url, err);
 
