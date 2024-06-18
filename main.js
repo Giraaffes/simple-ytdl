@@ -22,9 +22,7 @@ server.get("/info", async (req, res) => {
 	let videoInfo = await ytdl.getInfo(req.query.url);
 	res.json({
 		title: videoInfo.videoDetails.title,
-		formats: videoInfo.formats.filter(
-			f => f.container == "mp4"
-		).map(f => filterProps(f, 
+		formats: videoInfo.formats.map(f => filterProps(f, 
 			["itag", "qualityLabel", "audioBitrate"]
 		))
 	});
@@ -32,22 +30,25 @@ server.get("/info", async (req, res) => {
 
 server.get(["/video", "/audio"], async (req, res, next) => {
 	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
-	let ext = (req.path == "/video" ? "mp4" : "mp3");
-	res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.${ext}"`);
+	res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.ext"`);
 	next();
 })
 
-server.get("/video", (req, res, next) => {
+server.get("/video", async (req, res, next) => {
 	let { url, audio = "highestaudio", video = "highestvideo", disallowHD } = req.query;
 
-	let audioStream = ytdl(url, {
+	let { formats } = await ytdl.getInfo(url);
+	let audioFormat = ytdl.chooseFormat(formats, {
 		quality: audio, 
 		filter: disallowHD && (f => f.audioBitrate <= 128)
-	}).on("error", next);
-	let videoStream = ytdl(url, {
+	});
+	let videoFormat = ytdl.chooseFormat(formats, {
 		quality: video, 
-		filter: disallowHD && (f => f.qualityLabel != "1080p")
-	}).on("error", next);
+		filter: disallowHD && (f => f.height <= 720 && f.fps <= 30)
+	});
+
+	let approxFileSize = Math.floor((parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength)) * 1.0001);
+	res.set("Content-length", approxFileSize);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
 	let ffmpegProcess = cp.spawn(ffmpegPath, [
@@ -63,8 +64,8 @@ server.get("/video", (req, res, next) => {
 			"pipe", "pipe", "pipe"
 		]
 	});
-	audioStream.pipe(ffmpegProcess.stdio[3]);
-	videoStream.pipe(ffmpegProcess.stdio[4]);
+	ytdl(url, {format: audioFormat}).on("error", next).pipe(ffmpegProcess.stdio[3]);
+	ytdl(url, {format: videoFormat}).on("error", next).pipe(ffmpegProcess.stdio[4]);
 
 	ffmpegProcess.stdio[5].pipe(res);
 });
