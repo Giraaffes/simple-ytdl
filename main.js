@@ -3,6 +3,7 @@ require("express-async-errors");
 const express = require("express");
 const ytdl = require("ytdl-core");
 const cp = require("child_process");
+const ffmpegPath = require("ffmpeg-static");
 
 const server = express();
 
@@ -49,7 +50,7 @@ server.get("/video", (req, res, next) => {
 	}).on("error", next);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
-	let ffmpegProcess = cp.spawn(`${__dirname}/ffmpeg.exe`, [
+	let ffmpegProcess = cp.spawn(ffmpegPath, [
 		"-i", "pipe:3", "-i", "pipe:4",
 		"-map", "0:a", "-map", "1:v",
 		"-c", "copy",
