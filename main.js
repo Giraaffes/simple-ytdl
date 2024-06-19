@@ -52,7 +52,8 @@ server.get("/video", async (req, res, next) => {
 	});
 
 	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
-	let approxFileSize = formatFileSize(parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength));
+	let approxFileSize = parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength);
+	approxFileSize = formatFileSize(approxFileSize);
 	res.set("Content-Disposition", `attachment; filename="[${approxFileSize}] ${encodeURIComponent(title)}.ext"`);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
