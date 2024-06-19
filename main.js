@@ -12,6 +12,16 @@ function filterProps(obj, props) {
 	return Object.fromEntries(Object.entries(obj).filter(([k, v]) => props.includes(k)));
 }
 
+const filesizeUnits = ["", "KB", "MB", "GB", "TB"];
+function formatFilesize(bytes) {
+	let roundedLog1024 = Math.floor(Math.log2(bytes) / 10);
+	let unitDiv = Math.pow(2, roundedLog1024 * 10);
+	
+	let byteUnits = (bytes / unitDiv).toString().match(/^\d+(?:\.\d|$)/)[0];
+	let unit = filesizeUnits[roundedLog1024];
+	return `${byteUnits}${unit}`;
+}
+
 
 server.use((req, res, next) => {
 	res.set("access-control-allow-origin", "*");
@@ -28,12 +38,6 @@ server.get("/info", async (req, res) => {
 	});
 });
 
-server.get(["/video", "/audio"], async (req, res, next) => {
-	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
-	res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.ext"`);
-	next();
-})
-
 server.get("/video", async (req, res, next) => {
 	let { url, audio = "highestaudio", video = "highestvideo", disallowHD } = req.query;
 
@@ -47,9 +51,9 @@ server.get("/video", async (req, res, next) => {
 		filter: disallowHD && (f => f.height <= 720 && f.fps <= 30)
 	});
 
-	// The approximated file size must be a bit smaller than the actual file size, otherwise the download will fail
-	let approxFileSize = Math.floor((parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength)) * 0.999);
-	res.set("Content-length", approxFileSize);
+	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
+	let approxFileSize = parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength);
+	res.set("Content-Disposition", `attachment; filename="[${formatFilesize(approxFileSize)}] ${encodeURIComponent(title)}.ext"`);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
 	let ffmpegProcess = cp.spawn(ffmpegPath, [
@@ -71,7 +75,10 @@ server.get("/video", async (req, res, next) => {
 	ffmpegProcess.stdio[5].pipe(res);
 });
 
-server.get("/audio", (req, res, next) => {
+server.get("/audio", async (req, res, next) => {
+	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
+	res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.ext"`);
+
 	let { url, audio = "highestaudio" } = req.query;
 	ytdl(url, {quality: audio}).on("error", next).pipe(res);
 });
