@@ -13,7 +13,7 @@ function filterProps(obj, props) {
 }
 
 const filesizeUnits = ["", "KB", "MB", "GB", "TB"];
-function formatFilesize(bytes) {
+function formatFileSize(bytes) {
 	let roundedLog1024 = Math.floor(Math.log2(bytes) / 10);
 	let unitDiv = Math.pow(2, roundedLog1024 * 10);
 	
@@ -52,8 +52,8 @@ server.get("/video", async (req, res, next) => {
 	});
 
 	let title = (await ytdl.getBasicInfo(req.query.url)).videoDetails.title;
-	let approxFileSize = parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength);
-	res.set("Content-Disposition", `attachment; filename="[${formatFilesize(approxFileSize)}] ${encodeURIComponent(title)}.ext"`);
+	let approxFileSize = formatFileSize(parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength));
+	res.set("Content-Disposition", `attachment; filename="[${approxFileSize}] ${encodeURIComponent(title)}.ext"`);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
 	let ffmpegProcess = cp.spawn(ffmpegPath, [
