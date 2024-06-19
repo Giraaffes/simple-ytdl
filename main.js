@@ -47,7 +47,8 @@ server.get("/video", async (req, res, next) => {
 		filter: disallowHD && (f => f.height <= 720 && f.fps <= 30)
 	});
 
-	let approxFileSize = Math.floor((parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength)) * 1.0001);
+	// The approximated file size must be a bit smaller than the actual file size, otherwise the download will fail
+	let approxFileSize = Math.floor((parseInt(audioFormat.contentLength) + parseInt(videoFormat.contentLength)) * 0.999);
 	res.set("Content-length", approxFileSize);
 
 	// Thanks to https://github.com/redbrain/ytdl-core-muxer/blob/main/index.js
